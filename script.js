@@ -1,20 +1,37 @@
-const canvas = document.querySelector("canvas");
+/** @type {HTMLCanvasElement} */
+const canvas = document.querySelector("#canvas");
+/** @type {HTMLCanvasElement} */
+const targetCanvas = document.querySelector("#target");
 const ctx = canvas.getContext('2d');
-const width = prompt("Image Width");
-const depth = prompt("Image Height");
-const height = prompt("Height (number of layers)");
+const targetCtx = targetCanvas.getContext('2d');
+const width = parseInt(prompt("Image Width"));
+const depth = parseInt(prompt("Image Height"));
 class Layer {
   constructor(width, height) {
     this.width = width;
     this.height = height;
-    this.colorData = new Array(width);
-    for (let i = 0; i < width; i++) {
+    this.colorData = [];
+    for (let i = 0; i < width; i++) {
       this.colorData.push(new Int32Array(height));
+      for (let j = 0; j < height; j++) {
+        this.colorData[i][j] = Math.floor(Math.random() * 0xFFFFFF);
+      }
     }
-    this.depthMapData = new Array(width);
+    this.depthMapData = [];
     for (let i = 0; i < width; i++) {
       this.depthMapData.push(new Int32Array(height));
+      for (let j = 0; j < height; j++) {
+        this.depthMapData[i][j] = 128;
+      }
     }
+    this.active = true;
+    this.important = false;
+    this.useDepthMap = true;
+  }
+
+  setImportant(value) {
+    this.important = value;
+    
   }
 }
 class IsometricRenderer {
@@ -24,6 +41,13 @@ class IsometricRenderer {
     this.data = new Int32Array(width * height);
     this.depth = new Int32Array(width * height);
     this.whatWasDrawn = new Array(width * height);
+    this.noOverride = new Array(width * height);
+
+    for (let i = 0; i < this.noOverride.length; i++) {
+      this.noOverride[i] = false;
+    }
+    this.setTranslation(0, 0);
+    this.setAdditionalTranslation(0, 0);
   }
 
   resize(newWidth, newHeight) {
@@ -35,6 +59,11 @@ class IsometricRenderer {
     this.data = new Int32Array(width * height);
     this.depth = new Int32Array(width * height);
     this.whatWasDrawn = new Array(width * height);
+    this.noOverride = new Array(width * height);
+
+    for (let i = 0; i < this.noOverride.length; i++) {
+      this.noOverride[i] = false;
+    }
   }
 
   setTranslation(x, y) {
@@ -56,6 +85,9 @@ class IsometricRenderer {
     }
     for (let i = 0; i < this.whatWasDrawn.length; i++) {
       this.whatWasDrawn[i] = 0;
+    }
+    for (let i = 0; i < this.noOverride.length; i++) {
+      this.noOverride[i] = false;
     }
   }
 
@@ -83,9 +115,16 @@ class IsometricRenderer {
         }
         let index = (ty * this.width + tx);
         let localDepth = image.useDepthMap ? (baseDepth + (image.depthMapData[i][j] - 128)) : baseDepth;
-        if (this.depth[index] <= localDepth && (!image.useDepthMap || image.depthMapData[i][j] != 0)) {
-          this.depth[index] = localDepth;
-          this.data[index] = image.colorData[i][j];
+        if (this.depth[index] <= localDepth) {
+          if ((!image.useDepthMap || image.depthMapData[i][j] != 0)) {
+            this.depth[index] = localDepth;
+            this.data[index] = image.colorData[i][j];
+            if (!this.noOverride[index]) {
+              this.whatWasDrawn[index] = id;
+            }
+          }
+        } else if (image.depthMapData[i][j] == 255) {
+          this.noOverride[index] = true;
           this.whatWasDrawn[index] = id;
         }
       }
@@ -95,10 +134,10 @@ class IsometricRenderer {
   copyToCanvas(ctx) {
     const imageData = ctx.getImageData(0, 0, this.width, this.height);
     for (let i = 0; i < this.data.length; i++) {
-      imageData.data[i * 3] = (this.data[i] & 0xFF0000) >> 16;
-      imageData.data[i * 3 + 1] = (this.data[i] & 0x00FF00) >> 8;
-      imageData.data[i * 3 + 2] = (this.data[i] & 0x0000FF);
-      imageData.data[i * 3 + 3] = 255;
+      imageData.data[i * 4] = (this.data[i] & 0xFF0000) >> 16;
+      imageData.data[i * 4 + 1] = (this.data[i] & 0x00FF00) >> 8;
+      imageData.data[i * 4 + 2] = (this.data[i] & 0x0000FF);
+      imageData.data[i * 4 + 3] = 255;
     }
     ctx.putImageData(imageData, 0, 0);
   }
@@ -107,3 +146,21 @@ class IsometricRenderer {
     return this.whatWasDrawn[y * this.width + x];
   }
 }
+let layers = [];
+layers.push(new Layer(width, depth));
+let renderer = new IsometricRenderer(100, 100);
+function render() {
+  renderer.clear();
+  renderer.setTranslation(50, 100);
+  for (let i = 0; i < layers.length; i++) {
+    if (layers[i].active) {
+      renderer.drawImage(layers[i], 0, i, 0, 0);
+    }
+  }
+  targetCtx.clearRect(0, 0, 100, 100);
+  renderer.copyToCanvas(targetCtx);
+  ctx.clearRect(0, 0, 200, 200);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(targetCanvas, 0, 0, 400, 400);
+}
+render();
