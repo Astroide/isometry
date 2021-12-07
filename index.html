@@ -9,8 +9,13 @@
 </head>
 
 <body>
-	<canvas id="canvas" width="500" height="500"></canvas>
-	<canvas id="target" width="100" height="100"></canvas>
+	<div id="colors"></div>
+	<div id="layers"></div>
+	<div id="download">
+		<a href="data:text/plain,Error" download="ERROR.txt" onclick="generatePng(this);">Download .png</a>
+		<a href="data:text/plain,Error" download="ERROR.dm.txt" onclick="generateDmPng(this);">Download .dm.png</a>
+	</div>
+	<input type="color" onchange="setColor(this.value, true);">
 	<script src="script.js"></script>
 </body>
 
